@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createRoutingProduct, CreateRoutingProductPayload, deleteRoutingProduct, getRoutingProducts, GetRoutingProductsParams, updateRoutingProduct, UpdateRoutingProductBody, uploadRoutingProductFile } from "../routingProductsApis";
+import { createRoutingProduct, CreateRoutingProductPayload, deleteBulkRoutingProducts, deleteRoutingProduct, getRoutingProducts, GetRoutingProductsParams, updateRoutingProduct, UpdateRoutingProductBody, uploadRoutingProductFile } from "../routingProductsApis";
 
 
 // ─── Query Keys ──────────────────────────────────────────────────────────────
@@ -61,3 +61,13 @@ export const useDeleteRoutingProduct = () => {
     },
   });
 };
+
+export const useDeleteBulkRoutingProducts = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => deleteBulkRoutingProducts(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PRODUCT_KEYS.all });
+    },
+  });
+};

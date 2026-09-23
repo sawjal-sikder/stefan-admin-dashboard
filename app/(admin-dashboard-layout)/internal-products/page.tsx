@@ -3,8 +3,9 @@ import { useState } from "react";
 import Swal from "sweetalert2";
 import AddInternalProduct from "../../../components/internalProducts/addProductModal";
 import UpdateInternalProduct from "@/components/internalProducts/updateProductModal";
-import { useDeleteProduct, useGetProducts } from "@/apis/hooks/useInternalProducts";
+import { useDeleteBulkProducts, useDeleteProduct, useGetProducts } from "@/apis/hooks/useInternalProducts";
 import { Products } from "@/apis/internalProductApis";
+import UploadBulkInternalProduct from "@/components/internalProducts/uploadBulkProductModal";
 
 
 const PAGE_SIZE = 8;
@@ -39,7 +40,9 @@ export default function ProductTable() {
   const [verifiedFilter, setVerifiedFilter] = useState("All verified");
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddBulkModalOpen, setIsAddBulkModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Products | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
 
   const { data, isLoading } = useGetProducts({
@@ -49,6 +52,7 @@ export default function ProductTable() {
   });
 
   const { mutate: deleteProduct, isPending: isDeleting } = useDeleteProduct();
+  const { mutate: deleteBulkProducts, isPending: isBulkDeleting } = useDeleteBulkProducts();
 
   const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 1;
 
@@ -60,6 +64,23 @@ export default function ProductTable() {
       (verifiedFilter === "Verified" ? p.is_verified : !p.is_verified);
     return matchSource && matchVerified;
   });
+
+  const filteredProductIds = filtered.map((p) => p.id);
+  const isAllSelected = filteredProductIds.length > 0 && filteredProductIds.every((id) => selectedIds.includes(id));
+
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !filteredProductIds.includes(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...filteredProductIds])));
+    }
+  };
+
+  const handleSelectOne = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
 
   const handleSearchChange = (val: string) => {
     setSearch(val);
@@ -86,6 +107,7 @@ export default function ProductTable() {
     if (result.isConfirmed) {
       deleteProduct(id, {
         onSuccess: () => {
+          setSelectedIds((prev) => prev.filter((i) => i !== id));
           Swal.fire({
             title: "Deleted!",
             text: "Product has been removed.",
@@ -101,6 +123,55 @@ export default function ProductTable() {
           Swal.fire({
             title: "Failed!",
             text: "Something went wrong. Please try again.",
+            icon: "error",
+            confirmButtonColor: "#2d6a4f",
+            customClass: {
+              popup: "rounded-2xl",
+              confirmButton: "rounded-lg text-sm font-medium",
+            },
+          });
+        },
+      });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const result = await Swal.fire({
+      title: `Delete ${selectedIds.length} ${selectedIds.length === 1 ? "Product" : "Products"}?`,
+      text: "This action cannot be undone.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, delete selected",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: "#e2ddd5",
+      customClass: {
+        popup: "rounded-2xl",
+        confirmButton: "rounded-lg text-sm font-medium",
+        cancelButton: "rounded-lg text-sm font-medium !text-gray-600",
+      },
+    });
+
+    if (result.isConfirmed) {
+      deleteBulkProducts(selectedIds, {
+        onSuccess: () => {
+          setSelectedIds([]);
+          Swal.fire({
+            title: "Deleted!",
+            text: "Selected products have been removed.",
+            icon: "success",
+            confirmButtonColor: "#2d6a4f",
+            customClass: {
+              popup: "rounded-2xl",
+              confirmButton: "rounded-lg text-sm font-medium",
+            },
+          });
+        },
+        onError: () => {
+          Swal.fire({
+            title: "Failed!",
+            text: "Something went wrong while deleting products. Please try again.",
             icon: "error",
             confirmButtonColor: "#2d6a4f",
             customClass: {
@@ -153,13 +224,33 @@ export default function ProductTable() {
           </div>
         </div>
 
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center gap-2 px-5 py-2 bg-[#2d6a4f] hover:bg-[#245c43] text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
-        >
-          <span className="text-lg leading-none">+</span>
-          Add product
-        </button>
+        <div className="flex items-center gap-3">
+          {selectedIds.length > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+            >
+              <TrashIcon />
+              Delete Selected ({selectedIds.length})
+            </button>
+          )}
+          <button
+            onClick={() => setIsAddBulkModalOpen(true)}
+            className="flex items-center gap-2 px-5 py-2 bg-[#2d6a4f] hover:bg-[#245c43] text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+          >
+            <span className="text-lg leading-none">+</span>
+            Add Bulk product
+          </button>
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center gap-2 px-5 py-2 bg-[#2d6a4f] hover:bg-[#245c43] text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+          >
+            <span className="text-lg leading-none">+</span>
+            Add product
+          </button>
+        </div>
+
       </div>
 
       {/* Table */}
@@ -167,6 +258,14 @@ export default function ProductTable() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-100">
+              <th className="px-4 py-4 w-12 text-center">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 rounded border-gray-300 text-[#2d6a4f] focus:ring-[#2d6a4f] cursor-pointer"
+                />
+              </th>
               {["Barcode", "Product Name", "Brand", "Source", "Verified", "Added", "Actions"].map((col) => (
                 <th key={col} className="px-6 py-4 text-left text-sm font-semibold text-gray-800">{col}</th>
               ))}
@@ -175,7 +274,7 @@ export default function ProductTable() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center">
+                <td colSpan={8} className="px-6 py-12 text-center">
                   <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
                     <div className="w-5 h-5 border-2 border-[#2d6a4f] border-t-transparent rounded-full animate-spin" />
                     Loading...
@@ -184,14 +283,22 @@ export default function ProductTable() {
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-400">No products found.</td>
+                <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-400">No products found.</td>
               </tr>
             ) : (
               filtered.map((product) => (
                 <tr key={product.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-4 w-12 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(product.id)}
+                      onChange={() => handleSelectOne(product.id)}
+                      className="w-4 h-4 rounded border-gray-300 text-[#2d6a4f] focus:ring-[#2d6a4f] cursor-pointer"
+                    />
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-600">{product.barcode}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{product.product_name}</td>
-                  
+
                   <td className="px-6 py-4 text-sm text-gray-600">{product.brand}</td>
                   <td className="px-6 py-4"><SourceBadge source={product.source} /></td>
                   <td className="px-6 py-4"><VerifiedBadge status={product.is_verified} /></td>
@@ -243,6 +350,9 @@ export default function ProductTable() {
       {/* Modals */}
       {isAddModalOpen && (
         <AddInternalProduct onClose={() => setIsAddModalOpen(false)} />
+      )}
+      {isAddBulkModalOpen && (
+        <UploadBulkInternalProduct onClose={() => setIsAddBulkModalOpen(false)} />
       )}
       {selectedProduct && (
         <UpdateInternalProduct

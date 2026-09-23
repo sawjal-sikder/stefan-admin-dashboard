@@ -4,6 +4,7 @@ export type VerifiedStatus = "Verified" | "Pending";
 export type Source = "User OCR" | "Manual Admin" | "API";
 
 export interface Products {
+  message: string;
   id: number;
   barcode: string;
   product_name: string;
@@ -40,6 +41,7 @@ export interface CreateProductBody {
   is_active: boolean;
 }
 
+
 export type UpdateProductBody = Partial<CreateProductBody>;
 
 // ─── API Functions ───────────────────────────────────────────────────────────
@@ -61,6 +63,18 @@ export const createProduct = async ( body: CreateProductBody ): Promise<Products
   return data;
 };
 
+export const uploadBulkProduct = async ( file: File ): Promise<Products> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const { data } = await axiosApiInstance.post("/dashboard/internal-products/bulk/", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return data;
+};
+
 export const updateProduct = async ( id: number, body: UpdateProductBody): Promise<Products> => {
   const { data } = await axiosApiInstance.patch(`/dashboard/internal-products/${id}/`, body);
   return data;
@@ -69,4 +83,11 @@ export const updateProduct = async ( id: number, body: UpdateProductBody): Promi
 export const deleteProduct = async (id: number): Promise<void> => {
   await axiosApiInstance.delete(`/dashboard/internal-products/${id}/`);
 };
+
+export const deleteBulkProducts = async (ids: number[]): Promise<void> => {
+  await axiosApiInstance.delete("/dashboard/internal-products/bulk/delete/", {
+    data: { ids },
+  });
+};
+
 

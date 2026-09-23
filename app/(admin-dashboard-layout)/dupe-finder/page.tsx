@@ -5,7 +5,7 @@ import AddExpensiveProduct from "@/components/dupeFinder/addExpensiveProductModa
 import UpdateExpensiveProduct from "@/components/dupeFinder/updateExpensiveProductModal";
 import DupeEntriesTable from "@/components/dupeFinder/dupeEntriesTable";
 import DupeFoundsModal from "@/components/dupeFinder/dupeFoundsModal";
-import { useGetExpensiveProducts, useDeleteExpensiveProduct } from "@/apis/hooks/useExpensiveProducts";
+import { useGetExpensiveProducts, useDeleteExpensiveProduct, useDeleteBulkExpensiveProducts } from "@/apis/hooks/useExpensiveProducts";
 import { ExpensiveProduct } from "@/apis/expensiveProductApis";
 import AddDupeEntry from "@/components/dupeFinder/addDupeEntryModal";
 import UploadDupeProductBulkModal from "@/components/dupeFinder/uploadDupeProductBulkModal";
@@ -31,6 +31,7 @@ export default function ExpensiveProductsTable() {
     const [isAddProductOpen, setIsAddProductOpen] = useState(false);
     const [isUploadDupeBulkProductOpen, setUploadDupeBulkProductOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState<ExpensiveProduct | null>(null);
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
     // ✅ separate states for eye button and +Dupe button
     const [viewDupeProduct, setViewDupeProduct] = useState<ExpensiveProduct | null>(null);
@@ -53,8 +54,27 @@ export default function ExpensiveProductsTable() {
     });
 
     const { mutate: deleteProduct, isPending: isDeleting } = useDeleteExpensiveProduct();
+    const { mutate: deleteBulkProducts, isPending: isBulkDeleting } = useDeleteBulkExpensiveProducts();
 
     const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 1;
+
+    const currentProducts = data?.results ?? [];
+    const currentProductIds = currentProducts.map((p) => p.id).filter(Boolean);
+    const isAllSelected = currentProductIds.length > 0 && currentProductIds.every((id) => selectedIds.includes(id));
+
+    const handleSelectAll = () => {
+        if (isAllSelected) {
+            setSelectedIds((prev) => prev.filter((id) => !currentProductIds.includes(id)));
+        } else {
+            setSelectedIds((prev) => Array.from(new Set([...prev, ...currentProductIds])));
+        }
+    };
+
+    const handleSelectOne = (id: number) => {
+        setSelectedIds((prev) =>
+            prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+        );
+    };
 
     const handleSearchChange = (val: string) => {
         setSearch(val);
@@ -81,6 +101,7 @@ export default function ExpensiveProductsTable() {
         if (result.isConfirmed) {
             deleteProduct(id, {
                 onSuccess: () => {
+                    setSelectedIds((prev) => prev.filter((i) => i !== id));
                     Swal.fire({
                         title: "Deleted!",
                         text: "Product has been removed.",
@@ -93,6 +114,49 @@ export default function ExpensiveProductsTable() {
                     Swal.fire({
                         title: "Failed!",
                         text: "Something went wrong. Please try again.",
+                        icon: "error",
+                        confirmButtonColor: "#2D6A4F",
+                        customClass: { popup: "rounded-2xl", confirmButton: "rounded-lg text-sm font-medium" },
+                    });
+                },
+            });
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedIds.length === 0) return;
+        const result = await Swal.fire({
+            title: `Delete ${selectedIds.length} ${selectedIds.length === 1 ? "Product" : "Products"}?`,
+            text: "This action cannot be undone.",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Yes, delete selected",
+            cancelButtonText: "Cancel",
+            confirmButtonColor: "#ef4444",
+            cancelButtonColor: "#e2ddd5",
+            customClass: {
+                popup: "rounded-2xl",
+                confirmButton: "rounded-lg text-sm font-medium",
+                cancelButton: "rounded-lg text-sm font-medium !text-gray-600",
+            },
+        });
+
+        if (result.isConfirmed) {
+            deleteBulkProducts(selectedIds, {
+                onSuccess: () => {
+                    setSelectedIds([]);
+                    Swal.fire({
+                        title: "Deleted!",
+                        text: "Selected products have been removed.",
+                        icon: "success",
+                        confirmButtonColor: "#2D6A4F",
+                        customClass: { popup: "rounded-2xl", confirmButton: "rounded-lg text-sm font-medium" },
+                    });
+                },
+                onError: () => {
+                    Swal.fire({
+                        title: "Failed!",
+                        text: "Something went wrong while deleting products. Please try again.",
                         icon: "error",
                         confirmButtonColor: "#2D6A4F",
                         customClass: { popup: "rounded-2xl", confirmButton: "rounded-lg text-sm font-medium" },
@@ -128,6 +192,16 @@ export default function ExpensiveProductsTable() {
                             className="bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm text-gray-600 placeholder-gray-400 w-64 focus:outline-none focus:ring-1 focus:ring-[#4a9e5c]"
                         />
                         <div className="flex items-center gap-3">
+                            {selectedIds.length > 0 && (
+                                <button
+                                    onClick={handleBulkDelete}
+                                    disabled={isBulkDeleting}
+                                    className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+                                >
+                                    <TrashIcon />
+                                    Delete Selected ({selectedIds.length})
+                                </button>
+                            )}
                             <button
                                 onClick={() => setUploadDupeBulkProductOpen(true)}
                                 className="bg-[#2D6A4F] text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-[#234820] transition-colors cursor-pointer"
@@ -146,7 +220,13 @@ export default function ExpensiveProductsTable() {
                     {/* Table */}
                     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                         {/* Header */}
-                        <div className="grid grid-cols-[1fr_1.5fr_2.5fr_1fr_2fr_1.5fr_1.5fr] px-6 py-4 border-b border-gray-100">
+                        <div className="grid grid-cols-[40px_1fr_1.5fr_2.5fr_1fr_2fr_1.5fr_1.5fr] px-6 py-4 border-b border-gray-100 items-center">
+                            <input
+                                type="checkbox"
+                                checked={isAllSelected}
+                                onChange={handleSelectAll}
+                                className="w-4 h-4 rounded border-gray-300 text-[#2D6A4F] focus:ring-[#2D6A4F] cursor-pointer"
+                            />
                             {["ID", "Brand", "Product", "Price", "Key Actives", "Dupes", "Actions"].map((h) => (
                                 <span key={h} className="text-sm font-semibold text-gray-700">{h}</span>
                             ))}
@@ -164,8 +244,14 @@ export default function ExpensiveProductsTable() {
                             data?.results.map((product, idx) => (
                                 <div
                                     key={product.id}
-                                    className={`grid grid-cols-[1fr_1.5fr_2.5fr_1fr_2fr_1.5fr_1.5fr] px-6 py-1 items-center ${idx !== (data.results.length - 1) ? "border-b border-gray-100" : ""}`}
+                                    className={`grid grid-cols-[40px_1fr_1.5fr_2.5fr_1fr_2fr_1.5fr_1.5fr] px-6 py-1 items-center ${idx !== (data.results.length - 1) ? "border-b border-gray-100" : ""}`}
                                 >
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedIds.includes(product.id)}
+                                        onChange={() => handleSelectOne(product.id)}
+                                        className="w-4 h-4 rounded border-gray-300 text-[#2D6A4F] focus:ring-[#2D6A4F] cursor-pointer"
+                                    />
                                     <span className="text-sm text-gray-600">{product.id}</span>
                                     <span className="text-sm text-gray-600">{product.brand}</span>
                                     <span className="text-sm text-gray-600">{product.product_name}</span>
@@ -206,9 +292,6 @@ export default function ExpensiveProductsTable() {
 
                                     {/* Dupes */}
                                     <div className="flex items-center gap-2">
-                                        {/* <span className="bg-[#F0CE94] text-[#7A6000] text-xs px-3 py-1 rounded-full font-medium">
-                                            {product?.dupe_products} dupes
-                                        </span> */}
                                         <span className="bg-[#F0CE94] text-[#7A6000] text-xs px-3 py-1 rounded-full font-medium">
                                             {(Array.isArray(product?.dupe_products)
                                                 ? product.dupe_products.length

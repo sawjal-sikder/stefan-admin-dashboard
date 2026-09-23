@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Swal from "sweetalert2";
 import AddRoutineProduct from "@/components/routineProduct/addRoutineProductModal";
-import { useGetRoutingProducts, useDeleteRoutingProduct } from "@/apis/hooks/useRoutingProducts";
+import { useGetRoutingProducts, useDeleteRoutingProduct, useDeleteBulkRoutingProducts } from "@/apis/hooks/useRoutingProducts";
 import { SkincareProduct } from "@/apis/routingProductsApis";
 import UpdateRoutineProduct from "@/components/routineProduct/updateRoutingProduct";
 import UploadRoutingProduct from "@/components/routineProduct/uploadRoutingProductModal";
@@ -28,7 +28,7 @@ export default function RoutineProductsTable() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isUploadRoutingProductOpen, setUploadRoutingProductOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<SkincareProduct | null>(null);
-
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const { data, isLoading } = useGetRoutingProducts({
     page,
@@ -38,8 +38,27 @@ export default function RoutineProductsTable() {
   });
 
   const { mutate: deleteProduct, isPending: isDeleting } = useDeleteRoutingProduct();
+  const { mutate: deleteBulkProducts, isPending: isBulkDeleting } = useDeleteBulkRoutingProducts();
 
   const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 1;
+
+  const currentProducts = data?.results ?? [];
+  const currentProductIds = currentProducts.map((p) => p.product_id!).filter(Boolean);
+  const isAllSelected = currentProductIds.length > 0 && currentProductIds.every((id) => selectedIds.includes(id));
+
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !currentProductIds.includes(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...currentProductIds])));
+    }
+  };
+
+  const handleSelectOne = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
 
   const handleSearchChange = (val: string) => {
     setSearch(val);
@@ -71,6 +90,7 @@ export default function RoutineProductsTable() {
     if (result.isConfirmed) {
       deleteProduct(id, {
         onSuccess: () => {
+          setSelectedIds((prev) => prev.filter((i) => i !== id));
           Swal.fire({
             title: "Deleted!",
             text: "Product has been removed.",
@@ -83,6 +103,49 @@ export default function RoutineProductsTable() {
           Swal.fire({
             title: "Failed!",
             text: "Something went wrong. Please try again.",
+            icon: "error",
+            confirmButtonColor: "#2D6A4F",
+            customClass: { popup: "rounded-2xl", confirmButton: "rounded-lg text-sm font-medium" },
+          });
+        },
+      });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const result = await Swal.fire({
+      title: `Delete ${selectedIds.length} ${selectedIds.length === 1 ? "Product" : "Products"}?`,
+      text: "This action cannot be undone.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, delete selected",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: "#e2ddd5",
+      customClass: {
+        popup: "rounded-2xl",
+        confirmButton: "rounded-lg text-sm font-medium",
+        cancelButton: "rounded-lg text-sm font-medium !text-gray-600",
+      },
+    });
+
+    if (result.isConfirmed) {
+      deleteBulkProducts(selectedIds, {
+        onSuccess: () => {
+          setSelectedIds([]);
+          Swal.fire({
+            title: "Deleted!",
+            text: "Selected products have been removed.",
+            icon: "success",
+            confirmButtonColor: "#2D6A4F",
+            customClass: { popup: "rounded-2xl", confirmButton: "rounded-lg text-sm font-medium" },
+          });
+        },
+        onError: () => {
+          Swal.fire({
+            title: "Failed!",
+            text: "Something went wrong while deleting products. Please try again.",
             icon: "error",
             confirmButtonColor: "#2D6A4F",
             customClass: { popup: "rounded-2xl", confirmButton: "rounded-lg text-sm font-medium" },
@@ -119,6 +182,16 @@ export default function RoutineProductsTable() {
         </div>
 
         <div className="flex items-center gap-3">
+          {selectedIds.length > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+            >
+              <TrashIcon />
+              Delete Selected ({selectedIds.length})
+            </button>
+          )}
           <button
             onClick={() => setUploadRoutingProductOpen(true)}
             className="bg-[#2D6A4F] text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-[#234820] transition-colors cursor-pointer"
@@ -140,6 +213,14 @@ export default function RoutineProductsTable() {
         <table className="w-full text-sm text-stone-700">
           <thead>
             <tr className="border-b border-stone-100">
+              <th className="py-4 px-4 w-12 text-center">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 rounded border-stone-300 text-[#2D6A4F] focus:ring-[#2D6A4F] cursor-pointer"
+                />
+              </th>
               {["ID","Brand", "Product", "Category", "Slot", "Skin Types", "Price", "Priority", "Verified", "Actions"].map((col) => (
                 <th key={col} className="py-4 px-6 text-center font-semibold text-stone-800">{col}</th>
               ))}
@@ -148,7 +229,7 @@ export default function RoutineProductsTable() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={9} className="py-12 text-center">
+                <td colSpan={11} className="py-12 text-center">
                   <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
                     <div className="w-5 h-5 border-2 border-[#2D6A4F] border-t-transparent rounded-full animate-spin" />
                     Loading...
@@ -157,11 +238,19 @@ export default function RoutineProductsTable() {
               </tr>
             ) : data?.results.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-12 text-center text-stone-400">No products found.</td>
+                <td colSpan={11} className="py-12 text-center text-stone-400">No products found.</td>
               </tr>
             ) : (
               data?.results.map((product) => (
                 <tr key={product.product_id} className="border-b border-stone-50 last:border-0 transition-colors hover:bg-stone-50">
+                  <td className="py-4 px-4 w-12 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(product.product_id!)}
+                      onChange={() => handleSelectOne(product.product_id!)}
+                      className="w-4 h-4 rounded border-stone-300 text-[#2D6A4F] focus:ring-[#2D6A4F] cursor-pointer"
+                    />
+                  </td>
                   <td className="py-4 px-6 text-center">{product.product_id}</td>
                   <td className="py-4 px-6 text-center">{product.brand}</td>
                   <td className="py-4 px-6 text-center">{product.product_name}</td>
