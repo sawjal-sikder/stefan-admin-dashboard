@@ -153,10 +153,11 @@ export default function ExpensiveProductsTable() {
                         customClass: { popup: "rounded-2xl", confirmButton: "rounded-lg text-sm font-medium" },
                     });
                 },
-                onError: () => {
+                onError: (error: any) => {
+                    const message = error?.response?.data?.message || error?.response?.data?.detail || "Something went wrong while deleting products. Please try again.";
                     Swal.fire({
                         title: "Failed!",
-                        text: "Something went wrong while deleting products. Please try again.",
+                        text: message,
                         icon: "error",
                         confirmButtonColor: "#2D6A4F",
                         customClass: { popup: "rounded-2xl", confirmButton: "rounded-lg text-sm font-medium" },

@@ -42,8 +42,8 @@ export interface CreateExpensiveProductResponse {
         brand: string;
         product_name: string;
         price: string;
-        search_terms: string | string[]; // ✅ handle both
-        key_active_ingredients: string | string[]; // ✅ handle both
+        search_terms: string | string[];
+        key_active_ingredients: string | string[];
         dupe_products: number;
         is_active: boolean;
         created_at: string;
@@ -97,9 +97,10 @@ export const deleteExpensiveProduct = async (id: number) => {
 };
 
 export const deleteBulkExpensiveProducts = async (ids: number[]): Promise<void> => {
-    await axiosApiInstance.delete("/dashboard/expensive-product/bulk/delete/", {
-        data: { ids },
+    await axiosApiInstance.delete("/dashboard/expensive-products/bulk/delete/", {
+        data: { ids, id: ids },
     });
 };
+
 
 
