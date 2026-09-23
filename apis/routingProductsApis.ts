@@ -90,3 +90,10 @@ export const deleteRoutingProduct = async (id: number): Promise<void> => {
   await axiosApiInstance.delete(`/dashboard/routine-products/${id}/`);
 };
 
+export const deleteBulkRoutingProducts = async (ids: number[]): Promise<void> => {
+  await axiosApiInstance.delete("/dashboard/routine-product/bulk/delete/", {
+    data: { ids },
+  });
+};
+
+

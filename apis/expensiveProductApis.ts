@@ -96,3 +96,10 @@ export const deleteExpensiveProduct = async (id: number) => {
     return data;
 };
 
+export const deleteBulkExpensiveProducts = async (ids: number[]): Promise<void> => {
+    await axiosApiInstance.delete("/dashboard/expensive-product/bulk/delete/", {
+        data: { ids },
+    });
+};
+
+

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createExpensiveProduct, CreateExpensiveProduct, deleteExpensiveProduct, getExpensiveProduct, GetExpensiveProductsParams, updateExpensiveProduct, UpdateExpensiveProduct, uploadDupeProductBulkFile } from "../expensiveProductApis";
+import { createExpensiveProduct, CreateExpensiveProduct, deleteBulkExpensiveProducts, deleteExpensiveProduct, getExpensiveProduct, GetExpensiveProductsParams, updateExpensiveProduct, UpdateExpensiveProduct, uploadDupeProductBulkFile } from "../expensiveProductApis";
 
 export const PRODUCT_KEYS = {
   all: ["expensiveProducts"] as const,
@@ -57,3 +57,13 @@ export const useDeleteExpensiveProduct = () => {
     },
   });
 };
+
+export const useDeleteBulkExpensiveProducts = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => deleteBulkExpensiveProducts(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PRODUCT_KEYS.all });
+    },
+  });
+};

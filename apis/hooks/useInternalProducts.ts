@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createProduct, CreateProductBody, deleteProduct, getProducts, GetProductsParams, updateProduct, UpdateProductBody } from "../internalProductApis";
+import { createProduct, CreateProductBody, deleteBulkProducts, deleteProduct, getProducts, GetProductsParams, updateProduct, UpdateProductBody, uploadBulkProduct } from "../internalProductApis";
 
 // ─── Query Keys ──────────────────────────────────────────────────────────────
 
@@ -27,6 +27,17 @@ export const useCreateProduct = () => {
   });
 };
 
+export const useUploadBulkProduct = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => uploadBulkProduct(file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PRODUCT_KEYS.all });
+    },
+  });
+
+};
+
 export const useUpdateProduct = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -47,3 +58,13 @@ export const useDeleteProduct = () => {
     },
   });
 };
+
+export const useDeleteBulkProducts = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => deleteBulkProducts(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PRODUCT_KEYS.all });
+    },
+  });
+};
