@@ -3,7 +3,7 @@ import { useState } from "react";
 import Swal from "sweetalert2";
 import AddRoutineProduct from "@/components/routineProduct/addRoutineProductModal";
 import { useGetRoutingProducts, useDeleteRoutingProduct, useDeleteBulkRoutingProducts } from "@/apis/hooks/useRoutingProducts";
-import { SkincareProduct } from "@/apis/routingProductsApis";
+import { SkincareProduct, getRoutingProducts } from "@/apis/routingProductsApis";
 import UpdateRoutineProduct from "@/components/routineProduct/updateRoutingProduct";
 import UploadRoutingProduct from "@/components/routineProduct/uploadRoutingProductModal";
 
@@ -29,6 +29,7 @@ export default function RoutineProductsTable() {
   const [isUploadRoutingProductOpen, setUploadRoutingProductOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<SkincareProduct | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [isSelectingAll, setIsSelectingAll] = useState(false);
 
   const { data, isLoading } = useGetRoutingProducts({
     page,
@@ -44,13 +45,56 @@ export default function RoutineProductsTable() {
 
   const currentProducts = data?.results ?? [];
   const currentProductIds = currentProducts.map((p) => p.product_id!).filter(Boolean);
-  const isAllSelected = currentProductIds.length > 0 && currentProductIds.every((id) => selectedIds.includes(id));
+  const isAllSelected =
+    (data?.count ? selectedIds.length >= data.count : false) ||
+    (currentProductIds.length > 0 && currentProductIds.every((id) => selectedIds.includes(id)));
 
-  const handleSelectAll = () => {
-    if (isAllSelected) {
-      setSelectedIds((prev) => prev.filter((id) => !currentProductIds.includes(id)));
-    } else {
-      setSelectedIds((prev) => Array.from(new Set([...prev, ...currentProductIds])));
+  const handleSelectAll = async () => {
+    if (selectedIds.length > 0) {
+      setSelectedIds([]);
+      return;
+    }
+
+    if (!data?.count) return;
+
+    try {
+      setIsSelectingAll(true);
+      const PAGE_SIZE_BULK = 100;
+      const firstPage = await getRoutingProducts({
+        page: 1,
+        page_size: PAGE_SIZE_BULK,
+        search: search || undefined,
+        routine_slot: slot || undefined,
+      });
+
+      let allItems = [...(firstPage.results ?? [])];
+      const totalCount = firstPage.count ?? 0;
+      const totalPagesNeeded = Math.ceil(totalCount / PAGE_SIZE_BULK);
+
+      if (totalPagesNeeded > 1) {
+        const pagePromises = [];
+        for (let p = 2; p <= totalPagesNeeded; p++) {
+          pagePromises.push(
+            getRoutingProducts({
+              page: p,
+              page_size: PAGE_SIZE_BULK,
+              search: search || undefined,
+              routine_slot: slot || undefined,
+            })
+          );
+        }
+        const remainingPages = await Promise.all(pagePromises);
+        for (const res of remainingPages) {
+          allItems = allItems.concat(res.results ?? []);
+        }
+      }
+
+      const allIds = allItems.map((p) => p.product_id!).filter(Boolean);
+      setSelectedIds(allIds);
+    } catch (err) {
+      console.error("Failed to select all routine products", err);
+    } finally {
+      setIsSelectingAll(false);
     }
   };
 
@@ -63,11 +107,13 @@ export default function RoutineProductsTable() {
   const handleSearchChange = (val: string) => {
     setSearch(val);
     setPage(1);
+    setSelectedIds([]);
   };
 
   const handleSlotChange = (val: string) => {
     setSlot(val === "All slots" ? "" : val);
     setPage(1);
+    setSelectedIds([]);
   };
 
   const handleDelete = async (id: number) => {
@@ -214,12 +260,16 @@ export default function RoutineProductsTable() {
           <thead>
             <tr className="border-b border-stone-100">
               <th className="py-4 px-4 w-12 text-center">
-                <input
-                  type="checkbox"
-                  checked={isAllSelected}
-                  onChange={handleSelectAll}
-                  className="w-4 h-4 rounded border-stone-300 text-[#2D6A4F] focus:ring-[#2D6A4F] cursor-pointer"
-                />
+                <div className="flex items-center gap-1 justify-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    disabled={isSelectingAll}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 rounded border-stone-300 text-[#2D6A4F] focus:ring-[#2D6A4F] cursor-pointer disabled:opacity-50"
+                  />
+                  {isSelectingAll && <div className="w-3.5 h-3.5 border-2 border-[#2D6A4F] border-t-transparent rounded-full animate-spin" />}
+                </div>
               </th>
               {["ID","Brand", "Product", "Category", "Slot", "Skin Types", "Price", "Priority", "Verified", "Actions"].map((col) => (
                 <th key={col} className="py-4 px-6 text-center font-semibold text-stone-800">{col}</th>

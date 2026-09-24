@@ -104,7 +104,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   };
 
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="icon" {...props} className=" border-gray-200 bg-[#faf8f5]">
       {state !== "collapsed" && (
         <SidebarHeader className="-mb-12">
           <Link href="/" className="mx-auto inline-flex">
@@ -119,7 +119,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </Link>
         </SidebarHeader>
       )}
-      <SidebarContent className="pt-5">
+      <SidebarContent className="pt-5 ">
         <NavMain items={data.navMain} />
       </SidebarContent>
       {state !== "collapsed" && (

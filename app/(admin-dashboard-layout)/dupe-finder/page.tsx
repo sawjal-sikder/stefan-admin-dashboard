@@ -6,7 +6,7 @@ import UpdateExpensiveProduct from "@/components/dupeFinder/updateExpensiveProdu
 import DupeEntriesTable from "@/components/dupeFinder/dupeEntriesTable";
 import DupeFoundsModal from "@/components/dupeFinder/dupeFoundsModal";
 import { useGetExpensiveProducts, useDeleteExpensiveProduct, useDeleteBulkExpensiveProducts } from "@/apis/hooks/useExpensiveProducts";
-import { ExpensiveProduct } from "@/apis/expensiveProductApis";
+import { ExpensiveProduct, getExpensiveProduct } from "@/apis/expensiveProductApis";
 import AddDupeEntry from "@/components/dupeFinder/addDupeEntryModal";
 import UploadDupeProductBulkModal from "@/components/dupeFinder/uploadDupeProductBulkModal";
 
@@ -32,6 +32,7 @@ export default function ExpensiveProductsTable() {
     const [isUploadDupeBulkProductOpen, setUploadDupeBulkProductOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState<ExpensiveProduct | null>(null);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [isSelectingAll, setIsSelectingAll] = useState(false);
 
     // ✅ separate states for eye button and +Dupe button
     const [viewDupeProduct, setViewDupeProduct] = useState<ExpensiveProduct | null>(null);
@@ -60,13 +61,54 @@ export default function ExpensiveProductsTable() {
 
     const currentProducts = data?.results ?? [];
     const currentProductIds = currentProducts.map((p) => p.id).filter(Boolean);
-    const isAllSelected = currentProductIds.length > 0 && currentProductIds.every((id) => selectedIds.includes(id));
+    const isAllSelected =
+        (data?.count ? selectedIds.length >= data.count : false) ||
+        (currentProductIds.length > 0 && currentProductIds.every((id) => selectedIds.includes(id)));
 
-    const handleSelectAll = () => {
-        if (isAllSelected) {
-            setSelectedIds((prev) => prev.filter((id) => !currentProductIds.includes(id)));
-        } else {
-            setSelectedIds((prev) => Array.from(new Set([...prev, ...currentProductIds])));
+    const handleSelectAll = async () => {
+        if (selectedIds.length > 0) {
+            setSelectedIds([]);
+            return;
+        }
+
+        if (!data?.count) return;
+
+        try {
+            setIsSelectingAll(true);
+            const PAGE_SIZE_BULK = 100;
+            const firstPage = await getExpensiveProduct({
+                page: 1,
+                page_size: PAGE_SIZE_BULK,
+                search: search || undefined,
+            });
+
+            let allItems = [...(firstPage.results ?? [])];
+            const totalCount = firstPage.count ?? 0;
+            const totalPagesNeeded = Math.ceil(totalCount / PAGE_SIZE_BULK);
+
+            if (totalPagesNeeded > 1) {
+                const pagePromises = [];
+                for (let p = 2; p <= totalPagesNeeded; p++) {
+                    pagePromises.push(
+                        getExpensiveProduct({
+                            page: p,
+                            page_size: PAGE_SIZE_BULK,
+                            search: search || undefined,
+                        })
+                    );
+                }
+                const remainingPages = await Promise.all(pagePromises);
+                for (const res of remainingPages) {
+                    allItems = allItems.concat(res.results ?? []);
+                }
+            }
+
+            const allIds = allItems.map((p) => p.id).filter(Boolean);
+            setSelectedIds(allIds);
+        } catch (err) {
+            console.error("Failed to select all items", err);
+        } finally {
+            setIsSelectingAll(false);
         }
     };
 
@@ -79,6 +121,7 @@ export default function ExpensiveProductsTable() {
     const handleSearchChange = (val: string) => {
         setSearch(val);
         setCurrentPage(1);
+        setSelectedIds([]);
     };
 
     const handleDelete = async (id: number) => {
@@ -222,12 +265,16 @@ export default function ExpensiveProductsTable() {
                     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                         {/* Header */}
                         <div className="grid grid-cols-[40px_1fr_1.5fr_2.5fr_1fr_2fr_1.5fr_1.5fr] px-6 py-4 border-b border-gray-100 items-center">
-                            <input
-                                type="checkbox"
-                                checked={isAllSelected}
-                                onChange={handleSelectAll}
-                                className="w-4 h-4 rounded border-gray-300 text-[#2D6A4F] focus:ring-[#2D6A4F] cursor-pointer"
-                            />
+                            <div className="flex items-center gap-1">
+                                <input
+                                    type="checkbox"
+                                    checked={isAllSelected}
+                                    disabled={isSelectingAll}
+                                    onChange={handleSelectAll}
+                                    className="w-4 h-4 rounded border-gray-300 text-[#2D6A4F] focus:ring-[#2D6A4F] cursor-pointer disabled:opacity-50"
+                                />
+                                {isSelectingAll && <div className="w-3.5 h-3.5 border-2 border-[#2D6A4F] border-t-transparent rounded-full animate-spin" />}
+                            </div>
                             {["ID", "Brand", "Product", "Price", "Key Actives", "Dupes", "Actions"].map((h) => (
                                 <span key={h} className="text-sm font-semibold text-gray-700">{h}</span>
                             ))}

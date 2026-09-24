@@ -4,7 +4,7 @@ import Swal from "sweetalert2";
 import AddInternalProduct from "../../../components/internalProducts/addProductModal";
 import UpdateInternalProduct from "@/components/internalProducts/updateProductModal";
 import { useDeleteBulkProducts, useDeleteProduct, useGetProducts } from "@/apis/hooks/useInternalProducts";
-import { Products } from "@/apis/internalProductApis";
+import { Products, getProducts } from "@/apis/internalProductApis";
 import UploadBulkInternalProduct from "@/components/internalProducts/uploadBulkProductModal";
 
 
@@ -43,6 +43,7 @@ export default function ProductTable() {
   const [isAddBulkModalOpen, setIsAddBulkModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Products | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [isSelectingAll, setIsSelectingAll] = useState(false);
 
 
   const { data, isLoading } = useGetProducts({
@@ -66,13 +67,62 @@ export default function ProductTable() {
   });
 
   const filteredProductIds = filtered.map((p) => p.id);
-  const isAllSelected = filteredProductIds.length > 0 && filteredProductIds.every((id) => selectedIds.includes(id));
+  const isAllSelected =
+    (data?.count ? selectedIds.length >= data.count : false) ||
+    (filteredProductIds.length > 0 && filteredProductIds.every((id) => selectedIds.includes(id)));
 
-  const handleSelectAll = () => {
-    if (isAllSelected) {
-      setSelectedIds((prev) => prev.filter((id) => !filteredProductIds.includes(id)));
-    } else {
-      setSelectedIds((prev) => Array.from(new Set([...prev, ...filteredProductIds])));
+  const handleSelectAll = async () => {
+    if (selectedIds.length > 0) {
+      setSelectedIds([]);
+      return;
+    }
+
+    if (!data?.count) return;
+
+    try {
+      setIsSelectingAll(true);
+      const PAGE_SIZE_BULK = 100;
+      const firstPage = await getProducts({
+        page: 1,
+        page_size: PAGE_SIZE_BULK,
+        search: search || undefined,
+      });
+
+      let allItems = [...(firstPage.results ?? [])];
+      const totalCount = firstPage.count ?? 0;
+      const totalPagesNeeded = Math.ceil(totalCount / PAGE_SIZE_BULK);
+
+      if (totalPagesNeeded > 1) {
+        const pagePromises = [];
+        for (let p = 2; p <= totalPagesNeeded; p++) {
+          pagePromises.push(
+            getProducts({
+              page: p,
+              page_size: PAGE_SIZE_BULK,
+              search: search || undefined,
+            })
+          );
+        }
+        const remainingPages = await Promise.all(pagePromises);
+        for (const res of remainingPages) {
+          allItems = allItems.concat(res.results ?? []);
+        }
+      }
+
+      const allFiltered = allItems.filter((p) => {
+        const matchSource = sourceFilter === "All sources" || p.source === sourceFilter;
+        const matchVerified =
+          verifiedFilter === "All verified" ||
+          (verifiedFilter === "Verified" ? p.is_verified : !p.is_verified);
+        return matchSource && matchVerified;
+      });
+
+      const allIds = allFiltered.map((p) => p.id).filter(Boolean);
+      setSelectedIds(allIds);
+    } catch (err) {
+      console.error("Failed to select all items", err);
+    } finally {
+      setIsSelectingAll(false);
     }
   };
 
@@ -85,6 +135,7 @@ export default function ProductTable() {
   const handleSearchChange = (val: string) => {
     setSearch(val);
     setCurrentPage(1);
+    setSelectedIds([]);
   };
 
   const handleDelete = async (id: number) => {
@@ -259,12 +310,16 @@ export default function ProductTable() {
           <thead>
             <tr className="border-b border-gray-100">
               <th className="px-4 py-4 w-12 text-center">
-                <input
-                  type="checkbox"
-                  checked={isAllSelected}
-                  onChange={handleSelectAll}
-                  className="w-4 h-4 rounded border-gray-300 text-[#2d6a4f] focus:ring-[#2d6a4f] cursor-pointer"
-                />
+                <div className="flex items-center gap-1 justify-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    disabled={isSelectingAll}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 rounded border-gray-300 text-[#2d6a4f] focus:ring-[#2d6a4f] cursor-pointer disabled:opacity-50"
+                  />
+                  {isSelectingAll && <div className="w-3.5 h-3.5 border-2 border-[#2D6A4F] border-t-transparent rounded-full animate-spin" />}
+                </div>
               </th>
               {["Barcode", "Product Name", "Brand", "Source", "Verified", "Added", "Actions"].map((col) => (
                 <th key={col} className="px-6 py-4 text-left text-sm font-semibold text-gray-800">{col}</th>
